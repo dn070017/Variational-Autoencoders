@@ -68,3 +68,20 @@ def tcvae_loss(model, x_true, beta=1.0):
     total_loss = -tf.reduce_mean(logpx_z - (kl_divergence + (beta - 1) * tc_loss))
     
     return total_loss, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)
+
+def factorvae_loss(model, x_true, beta=1.0):
+    mean, logvar = model.encode(x_true)
+    z = model.reparameterize(mean, logvar)
+    x_pred = model.decode(z)
+
+    density = model.discriminator(z)
+
+    cross_ent = compute_cross_entropy(x_true, x_pred)
+    logpx_z = -1 * tf.reduce_sum(cross_ent, axis=[1, 2, 3])
+
+    kl_divergence = tf.reduce_sum(compute_kl_divergence(mean, logvar), axis=1)
+    tc_loss = tf.reduce_mean(density[:, 0] - density[:, 1])
+
+    total_loss = -tf.reduce_mean(logpx_z - (kl_divergence + (beta - 1) * tc_loss))
+
+    return total_loss, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)

@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 import warnings
 
-from models.creation import VAE
+from models.creator import VAE
 from utils.utils import preprocess_images, generate_and_save_images, animated_image_generation, plot_latent_images
 from utils.losses import vae_loss
 from time import time
@@ -59,18 +59,27 @@ def main(model_name, beta, num_epochs, train_size, batch_size, latent_dim, test_
     test_dataset = (tf.data.Dataset.from_tensor_slices(test_images)
                     .shuffle(test_size).take(test_size).batch(test_size))
 
-    optimizer = tf.keras.optimizers.Adam(1e-4)
+    optimizer_vae = tf.keras.optimizers.Adam(1e-4)
+    optimizer_d = tf.keras.optimizers.Adam(1e-4)
+
     model = VAE.create_model(model_name, {'latent_dim': latent_dim, 'prefix': prefix})
-    print("WHY")
 
     for epoch in range(1, num_epochs + 1):
         start_time = time()
         for train_x in train_dataset:
-            total_loss, reconstructed_loss, kl_divergence = model.train_step(
-                train_x,
-                optimizer,
-                beta=beta
-            )
+            if type(model).__name__ != 'FactorVAE':
+                total_loss, reconstructed_loss, kl_divergence = model.train_step(
+                    train_x,
+                    optimizer_vae,
+                    beta=beta
+                )
+            else:
+                total_loss, reconstructed_loss, kl_divergence = model.train_step(
+                    train_x,
+                    optimizer_vae,
+                    optimizer_d,
+                    beta=beta
+                )
         end_time = time()
         display.clear_output(wait=False)
         for test_x in test_dataset:
@@ -105,7 +114,7 @@ if __name__ == "__main__":
         # from iPython (in VSCODE)
         warnings.warn('there is an error in the argument, use default parameters instead')
         main(
-            model_name='tcvae',
+            model_name='factorvae',
             beta=2.0,
             num_epochs=25,
             train_size=6400,
@@ -113,7 +122,7 @@ if __name__ == "__main__":
             latent_dim=2,
             test_size=25,
             outdir='tmp',
-            prefix='tcvae',
+            prefix='factorvae',
             show_images=True
         )
 

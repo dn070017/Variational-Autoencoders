@@ -1,6 +1,7 @@
 #%%
 from models.vae import BaseVAE
 from models.tcvae import TCVAE
+from models.factorvae import FactorVAE
 import warnings
 
 class VAE(object):
@@ -10,8 +11,10 @@ class VAE(object):
           return BaseVAE(**kwargs)
       elif model in ['tcvae', 'beta-tcvae', 'btcvae', 'b-tcvae']:
           return TCVAE(**kwargs)
+      elif model in ['factorvae']:
+          return FactorVAE(**kwargs)
       else:
-          warnings.warn('no matched model name can be found for {model}, use beta-vae instead')
+          warnings.warn(f'no matched model name can be found for {model}, use beta-vae instead')
           return BaseVAE(**kwargs)
 
 # %%
