@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from utils.utils import compute_output_dims
-from utils.losses import vae_loss
+from utils.losses import vae_loss, compute_kl_divergence
 class BaseVAE(tf.keras.Model):
   def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), prefix='vae'):
     super(BaseVAE, self).__init__()
@@ -80,3 +80,7 @@ class BaseVAE(tf.keras.Model):
       probs = tf.sigmoid(logits)
       return probs
     return logits
+
+  def relevance_score_given_sample(self, x):
+    mean, logvar = self.encode(x)
+    return -1 * tf.reduce_mean(compute_kl_divergence(mean, logvar), axis=0)

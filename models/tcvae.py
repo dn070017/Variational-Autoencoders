@@ -1,5 +1,3 @@
-import numpy as np
-import tensorflow as tf
 from models.vae import BaseVAE
 from utils.losses import tcvae_loss
 

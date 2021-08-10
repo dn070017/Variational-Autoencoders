@@ -1,4 +1,3 @@
-import numpy as np
 import tensorflow as tf
 from models.vae import BaseVAE
 from utils.losses import factorvae_loss
@@ -33,9 +32,9 @@ class FactorVAE(BaseVAE):
     self.set_discriminator_trainable(True)    
     with tf.GradientTape() as tape:
       mean, logvar = self.encode(x_true)
-      z = self.reparameterize(mean, logvar)
+      z = self.reparameterize(mean, logvar) * self.relevance.relevance_coefficient()
       z_perm = FactorVAE.permute_dims(z)
-
+      
       density = self.discriminator(tf.concat([z, z_perm], axis=0))
       labels = FactorVAE.create_discriminator_label(z)
 

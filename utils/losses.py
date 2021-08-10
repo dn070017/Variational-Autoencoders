@@ -85,3 +85,25 @@ def factorvae_loss(model, x_true, beta=1.0):
     total_loss = -tf.reduce_mean(logpx_z - (kl_divergence + (beta - 1) * tc_loss))
 
     return total_loss, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)
+
+def rfvae_loss(model, x_true, beta=1.0):
+    mean, logvar = model.encode(x_true)
+    z = model.reparameterize(mean, logvar)
+    x_pred = model.decode(z)
+
+    rc = model.relevance.relevance_coefficient() # R
+    rc_penalty = model.relevance.penalty_coefficient() # lambda
+
+    density = model.discriminator(rc * z)
+
+    cross_ent = compute_cross_entropy(x_true, x_pred)
+    logpx_z = -1 * tf.reduce_sum(cross_ent, axis=[1, 2, 3])
+
+    kl_divergence = tf.reduce_sum(rc_penalty * compute_kl_divergence(mean, logvar), axis=1)
+    tc_loss = tf.reduce_mean(density[:, 0] - density[:, 1])
+
+    fractional_loss = -1 * tf.reduce_sum(rc * tf.math.log(rc + 1e-7) + (1 - rc) * tf.math.log((1 - rc) + 1e-7))
+
+    total_loss = -tf.reduce_mean(logpx_z - (kl_divergence + (beta - 1) * tc_loss)) + model.eta_s * tf.reduce_sum(tf.abs(rc)) + model.eta_h * fractional_loss
+
+    return total_loss, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)

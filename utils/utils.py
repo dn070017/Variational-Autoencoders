@@ -53,7 +53,7 @@ def animated_image_generation(model, path):
     writer.append_data(image)
 
 
-def plot_latent_images(model, path, n, digit_size=28, show_images=False):
+def plot_latent_images(model, x, path, n, digit_size=28, show_images=False):
   norm = tfp.distributions.Normal(0, 1)
   grid_x = norm.quantile(np.linspace(0.05, 0.95, n))
   grid_y = norm.quantile(np.linspace(0.05, 0.95, n))
@@ -61,9 +61,21 @@ def plot_latent_images(model, path, n, digit_size=28, show_images=False):
   image_height = image_width
   image = np.zeros((image_height, image_width))
 
+  if type(model).__name__ == 'RFVAE':
+    relevance = model.relevance_score()
+  else:
+    relevance = model.relevance_score_given_sample(x)
+
+  order = tf.argsort(
+      relevance, axis=-1, direction='ASCENDING', stable=False, name=None
+  )
+
   for i, yi in enumerate(grid_x):
     for j, xi in enumerate(grid_y):
-      z = np.array([[xi, yi]])
+      z = np.zeros((1, model.latent_dim))
+      # select the top 2 most relevant latent dimensions
+      z[0, order[0]] = xi
+      z[0, order[1]] = yi
       x_decoded = model.sample(z)
       digit = tf.reshape(x_decoded[0], (digit_size, digit_size))
       image[i * digit_size: (i + 1) * digit_size,
