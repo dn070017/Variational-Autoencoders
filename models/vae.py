@@ -1,17 +1,16 @@
 import numpy as np
 import tensorflow as tf
 from utils.utils import compute_output_dims
-from utils.losses import beta_vae_loss
-
-class VAE(tf.keras.Model):
-  def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), name='vae'):
-    super(VAE, self).__init__()
-    self.prefix = 'vae'
+from utils.losses import vae_loss
+class BaseVAE(tf.keras.Model):
+  def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), prefix='vae'):
+    super(BaseVAE, self).__init__()
+    self.prefix = prefix
     self.latent_dim = np.array(latent_dim, dtype=np.int32)
     self.input_dims = np.array(input_dims, dtype=np.int32)
     self.kernel_size = np.array(kernel_size, dtype=np.int32)
     self.strides = np.array(strides, dtype=np.int32)
-    self.loss_fn = beta_vae_loss
+    self.loss_fn = vae_loss
 
     self.encoder = tf.keras.Sequential(
       [

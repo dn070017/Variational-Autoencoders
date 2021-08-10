@@ -33,7 +33,6 @@ def generate_and_save_images(model, path, epoch, test_x, show_images=False):
     plt.imshow(predictions[i, :, :, 0], cmap='gray')
     plt.axis('off')
 
-  # tight_layout minimizes the overlap between 2 sub-plots
   plt.savefig(os.path.join(path, f'{model.prefix}_epoch_{epoch:04d}.png'))
   if show_images:
     plt.show()
