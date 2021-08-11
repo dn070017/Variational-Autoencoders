@@ -11,6 +11,10 @@ from utils.losses import vae_loss
 from time import time
 from IPython import display
 
+def data_generator(X, y):
+    for image, label in zip(X, y):
+        yield {'x': image, 'y': label}
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Variational Autoencoders on MNIST Dataset.')
     parser.add_argument(
@@ -47,49 +51,56 @@ def parse_arguments():
 def main(model_name, beta, num_epochs, train_size, batch_size, latent_dim, test_size, outdir, prefix, show_images):
     test_size = int(np.sqrt(test_size)) ** 2
 
-    (train_images, _), (test_images, _) = tf.keras.datasets.mnist.load_data()
+    (train_images, train_labels), (test_images, test_labels) = tf.keras.datasets.mnist.load_data()
 
     os.makedirs(outdir, exist_ok=True)
 
+    train_labels = tf.one_hot(train_labels, 10)
+    test_labels = tf.one_hot(test_labels, 10)
     train_images = preprocess_images(train_images)
     test_images = preprocess_images(test_images)
 
-    train_dataset = (tf.data.Dataset.from_tensor_slices(train_images)
-                    .shuffle(train_size).take(train_size).batch(batch_size))
-    test_dataset = (tf.data.Dataset.from_tensor_slices(test_images)
-                    .shuffle(test_size).take(test_size).batch(test_size))
+    train_dataset = tf.data.Dataset.from_generator(
+        data_generator,
+        output_types={'x': tf.float32, 'y': tf.float32},
+        args=(train_images, train_labels)
+    ).shuffle(train_size).take(train_size).batch(batch_size)
 
-    optimizer_vae = tf.keras.optimizers.Adam(1e-4)
-    optimizer_d = tf.keras.optimizers.Adam(1e-4)
+    test_dataset = tf.data.Dataset.from_generator(
+        data_generator,
+        output_types={'x': tf.float32, 'y': tf.float32},
+        args=(test_images, test_labels)
+    ).shuffle(test_size).take(test_size).batch(test_size)
 
-    model = VAE.create_model(model_name, {'latent_dim': latent_dim, 'prefix': prefix})
+    optimizers = {
+        'vae': tf.keras.optimizers.Adam(1e-4),
+        'discriminator': tf.keras.optimizers.Adam(1e-4)
+    }
+
+    model = VAE.create_model(
+        model_name, 
+        {'latent_dim': latent_dim, 'prefix': prefix}
+    )
 
     for epoch in range(1, num_epochs + 1):
         start_time = time()
         for train_x in train_dataset:
-            if type(model).__name__ not in ['FactorVAE', 'RFVAE']:
-                total_loss, reconstructed_loss, kl_divergence = model.train_step(
-                    train_x,
-                    optimizer_vae,
-                    beta=beta
-                )
-            else:
-                total_loss, reconstructed_loss, kl_divergence = model.train_step(
-                    train_x,
-                    optimizer_vae,
-                    optimizer_d,
-                    beta=beta
-                )
+            total_loss, reconstructed_loss, kl_divergence = model.train_step(
+                train_x, optimizers, beta=beta)
+
         end_time = time()
         display.clear_output(wait=False)
         for test_x in test_dataset:
-            total_loss, reconstructed_loss, kl_divergence = vae_loss(model, test_x)
+            total_loss, reconstructed_loss, kl_divergence = model.loss_fn(model, test_x)
 
-        message = f'Epoch: {epoch:>5}   Test ELBO: {-total_loss:>.2f}    Test Reconstructed Loss: {-reconstructed_loss:>.5f}    Test KL-Divergence: {kl_divergence:>.2f}    Time Elapse: {end_time - start_time:.3f}'
-
+        message = ''.join(
+            f'Epoch: {epoch:>5}\tTest ELBO: {-total_loss:>.2f}\t'
+            f'Test Reconstructed Loss: {-reconstructed_loss:>.5f}\tTest KL-Divergence: '
+            f'{kl_divergence:>.2f}\tTime Elapse: {end_time - start_time:.3f}'
+        )
         print(message)
         generate_and_save_images(model, outdir, epoch, test_x, show_images)
-
+        
     animated_image_generation(model, outdir)
     plot_latent_images(model, train_x, outdir, 15, show_images=show_images)
 
@@ -116,7 +127,7 @@ if __name__ == "__main__":
         # from iPython (in VSCODE)
         warnings.warn('there is an error in the argument, use default parameters instead')
         model = main(
-            model_name='rfvae',
+            model_name='vae',
             beta=2.0,
             num_epochs=25,
             train_size=6400,
@@ -124,9 +135,8 @@ if __name__ == "__main__":
             latent_dim=2,
             test_size=25,
             outdir='tmp',
-            prefix='rfvae',
+            prefix='vae',
             show_images=True
         )
-
 
 # %%

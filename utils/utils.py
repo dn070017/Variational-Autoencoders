@@ -19,18 +19,16 @@ def compute_output_dims(input_dims, kernel_size, strides):
 
 
 def generate_and_save_images(model, path, epoch, test_x, show_images=False):
-  mean, logvar = model.encode(test_x)
-  z = model.reparameterize(mean, logvar)
-  predictions = model.sample(z)
+  mean, logvar, z, x_pred = model.forward(test_x, apply_sigmoid=True)
 
-  num_images = predictions.shape[0]
+  num_images = x_pred.shape[0]
   grid_size = int(np.sqrt(num_images))
 
   fig = plt.figure(figsize=(grid_size, grid_size))
 
   for i in range(num_images):
     plt.subplot(grid_size, grid_size, i + 1)
-    plt.imshow(predictions[i, :, :, 0], cmap='gray')
+    plt.imshow(x_pred[i, :, :, 0], cmap='gray')
     plt.axis('off')
 
   plt.savefig(os.path.join(path, f'{model.prefix}_epoch_{epoch:04d}.png'))
@@ -53,7 +51,7 @@ def animated_image_generation(model, path):
     writer.append_data(image)
 
 
-def plot_latent_images(model, x, path, n, digit_size=28, show_images=False):
+def plot_latent_images(model, batch, path, n, digit_size=28, show_images=False):
   norm = tfp.distributions.Normal(0, 1)
   grid_x = norm.quantile(np.linspace(0.05, 0.95, n))
   grid_y = norm.quantile(np.linspace(0.05, 0.95, n))
@@ -61,25 +59,27 @@ def plot_latent_images(model, x, path, n, digit_size=28, show_images=False):
   image_height = image_width
   image = np.zeros((image_height, image_width))
 
-  if type(model).__name__ == 'RFVAE':
-    relevance = model.relevance_score()
-  else:
-    relevance = model.relevance_score_given_sample(x)
+  relevance = model.relevance_score(batch=batch)
 
   order = tf.argsort(
       relevance, axis=-1, direction='ASCENDING', stable=False, name=None
   )
 
+  target = 0
   for i, yi in enumerate(grid_x):
+    if target >= 10:
+      target = 0
     for j, xi in enumerate(grid_y):
       z = np.zeros((1, model.latent_dim))
       # select the top 2 most relevant latent dimensions
       z[0, order[0]] = xi
       z[0, order[1]] = yi
-      x_decoded = model.sample(z)
+      z = tf.convert_to_tensor(z, dtype=tf.float32)
+      x_decoded = model.generate(z, target=target)
       digit = tf.reshape(x_decoded[0], (digit_size, digit_size))
       image[i * digit_size: (i + 1) * digit_size,
             j * digit_size: (j + 1) * digit_size] = digit.numpy()
+    target += 1
 
   plt.figure(figsize=(10, 10))
   plt.imshow(image, cmap='Greys_r')

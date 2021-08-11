@@ -52,22 +52,29 @@ class BaseVAE(tf.keras.Model):
         padding='same')
     ])
 
-  def train_step(self, x_true, optimizer, beta=1.0):
+  def train_step(self, batch, optimizers, beta=1.0):
     with tf.GradientTape() as tape:
-      total_loss, reconstructed_loss, kl_divergence = self.loss_fn(self, x_true, beta)
+      total_loss, reconstructed_loss, kl_divergence = self.loss_fn(self, batch, beta)
       gradients = tape.gradient(total_loss, self.trainable_variables)
-      optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+      optimizers['vae'].apply_gradients(zip(gradients, self.trainable_variables))
         
       return total_loss, reconstructed_loss, kl_divergence
 
+  def forward(self, batch, apply_sigmoid=False):
+    mean, logvar = self.encode(batch)
+    z = self.reparameterize(mean, logvar)
+    x_pred = self.decode(z, apply_sigmoid=apply_sigmoid)
+  
+    return mean, logvar, z, x_pred
+
   @tf.function
-  def sample(self, eps=None):
+  def generate(self, eps=None, num_generated_images=15, **kwargs):
     if eps is None:
-      eps = tf.random.normal(shape=(100, self.latent_dim))
+      eps = tf.random.normal(shape=(num_generated_images, self.latent_dim))
     return self.decode(eps, apply_sigmoid=True)
 
-  def encode(self, x):
-    mean, logvar = tf.split(self.encoder(x), num_or_size_splits=2, axis=1)
+  def encode(self, batch):
+    mean, logvar = tf.split(self.encoder(batch['x']), num_or_size_splits=2, axis=1)
     return mean, logvar
 
   def reparameterize(self, mean, logvar):
@@ -81,6 +88,9 @@ class BaseVAE(tf.keras.Model):
       return probs
     return logits
 
-  def relevance_score_given_sample(self, x):
-    mean, logvar = self.encode(x)
-    return -1 * tf.reduce_mean(compute_kl_divergence(mean, logvar), axis=0)
+  def relevance_score(self, **kwargs):
+    return self.average_kl_divergence(kwargs['batch'])
+
+  def average_kl_divergence(self, batch):
+    mean, logvar = self.encode(batch)
+    return tf.reduce_mean(compute_kl_divergence(mean, logvar), axis=0)

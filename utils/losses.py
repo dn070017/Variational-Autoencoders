@@ -8,11 +8,6 @@ def compute_log_normal_pdf(mu_true, logvar_true, mu_pred):
 def compute_cross_entropy(p_true, p_pred):
     return tf.nn.sigmoid_cross_entropy_with_logits(logits=p_pred, labels=p_true)
 
-def tcvae_batch_estimator(q):
-    # E_q[log(q(z))] ~ 1/M 𝚺[log(𝚺q(z_i|z_j)) - log(NM)] ignored log(NM)
-    # E_q[log(q(z))] ~ 1/M 𝚺[log(𝚺q(z_i|z_j))]
-    return 
-
 def compute_kl_divergence(mean, logvar):
     return -.5 * ((1 + logvar) - tf.exp(logvar) - tf.pow(mean, 2))
 
@@ -20,7 +15,7 @@ def compute_tc_loss(mu_true, logvar_true, mu_pred):
     # i: index of sampling point from the distribution of sample i.
     # j: index of distribution inferred from sample j.
     # k: index of the latent dimensions
-    # E_q[log(q(z) / 𝚷_k(q(z_k))] (ii) in eq(2)
+    # E_q[log(q(z) / 𝚷_k(q(z_k))] # (ii) in eq(2) from Chen et al., 2018
     # = E_q[log(q(z)) - 𝚺_k[log(q(z_k))]]
 
     # log[q(z_i|z_j)]: logqz_i_j
@@ -29,8 +24,8 @@ def compute_tc_loss(mu_true, logvar_true, mu_pred):
 
     # joint distribution: q(z_ij1, z_ij2...)
     # log(q(z)): logqz
-    # log(q(z)) ~ log(𝚺_j𝚺_k q(z_ik|z_jk)) - log(NM) ignored log(NM)
-    # log(q(z)) ~ log(𝚺_j𝚺_k q(z_ik|z_jk))
+    # log(q(z)) ~ log(𝚺_j𝚺_k q(z_ik|z_jk)) - log(NM) #  eq S4 from Chen et al., 2018
+    # log(q(z)) ~ log(𝚺_j𝚺_k q(z_ik|z_jk)) # ignored log(NM)
     logqz = tf.reduce_logsumexp(tf.reduce_sum(logqz_i_j, axis=2), axis=1)
 
     # independent distribution: q(z_ij1)q(z_ij2)... 
@@ -40,26 +35,19 @@ def compute_tc_loss(mu_true, logvar_true, mu_pred):
 
     return logqz - sigma_logq_k
 
-def vae_loss(model, x_true, beta=1.0):
-    mean, logvar = model.encode(x_true)
-    z = model.reparameterize(mean, logvar)
-    x_pred = model.decode(z)
+def vae_loss(model, batch, beta=1.0):
+    mean, logvar, z, x_pred = model.forward(batch)
 
-    cross_ent = compute_cross_entropy(x_true, x_pred)
+    cross_ent = compute_cross_entropy(batch['x'], x_pred)
     logpx_z = -1 * tf.reduce_sum(cross_ent, axis=[1, 2, 3])
-    
     kl_divergence = tf.reduce_sum(compute_kl_divergence(mean, logvar), axis=1)
-
     total_loss = -tf.reduce_mean(logpx_z - beta * kl_divergence)
-    
     return total_loss, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)
 
-def tcvae_loss(model, x_true, beta=1.0):
-    mean, logvar = model.encode(x_true)
-    z = model.reparameterize(mean, logvar)
-    x_pred = model.decode(z)
+def tcvae_loss(model, batch, beta=1.0):
+    mean, logvar, z, x_pred = model.forward(batch)
 
-    cross_ent = compute_cross_entropy(x_true, x_pred)
+    cross_ent = compute_cross_entropy(batch['x'], x_pred)
     logpx_z = -1 * tf.reduce_sum(cross_ent, axis=[1, 2, 3])
     
     kl_divergence = tf.reduce_sum(compute_kl_divergence(mean, logvar), axis=1)
@@ -69,14 +57,23 @@ def tcvae_loss(model, x_true, beta=1.0):
     
     return total_loss, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)
 
-def factorvae_loss(model, x_true, beta=1.0):
-    mean, logvar = model.encode(x_true)
-    z = model.reparameterize(mean, logvar)
-    x_pred = model.decode(z)
+def cvae_loss(model, batch, beta=1.0):
+    mean, logvar, z, x_pred = model.forward(batch)
+
+    cross_ent = compute_cross_entropy(batch['x'], x_pred)
+    logpx_z = -1 * tf.reduce_sum(cross_ent, axis=[1, 2, 3])
+    
+    kl_divergence = tf.reduce_sum(compute_kl_divergence(mean, logvar), axis=1)
+    total_loss = -tf.reduce_mean(logpx_z - beta * kl_divergence)
+    
+    return total_loss, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)
+
+def factorvae_loss(model, batch, beta=1.0):
+    mean, logvar, z, x_pred = model.forward(batch)
 
     density = model.discriminator(z)
 
-    cross_ent = compute_cross_entropy(x_true, x_pred)
+    cross_ent = compute_cross_entropy(batch['x'], x_pred)
     logpx_z = -1 * tf.reduce_sum(cross_ent, axis=[1, 2, 3])
 
     kl_divergence = tf.reduce_sum(compute_kl_divergence(mean, logvar), axis=1)
@@ -86,17 +83,15 @@ def factorvae_loss(model, x_true, beta=1.0):
 
     return total_loss, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)
 
-def rfvae_loss(model, x_true, beta=1.0):
-    mean, logvar = model.encode(x_true)
-    z = model.reparameterize(mean, logvar)
-    x_pred = model.decode(z)
+def rfvae_loss(model, batch, beta=1.0):
+    mean, logvar, z, x_pred = model.forward(batch)
 
-    rc = model.relevance.relevance_coefficient() # R
+    rc = model.relevance.relevance_coefficient()       # R
     rc_penalty = model.relevance.penalty_coefficient() # lambda
 
     density = model.discriminator(rc * z)
 
-    cross_ent = compute_cross_entropy(x_true, x_pred)
+    cross_ent = compute_cross_entropy(batch['x'], x_pred)
     logpx_z = -1 * tf.reduce_sum(cross_ent, axis=[1, 2, 3])
 
     kl_divergence = tf.reduce_sum(rc_penalty * compute_kl_divergence(mean, logvar), axis=1)
