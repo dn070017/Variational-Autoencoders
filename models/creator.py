@@ -4,6 +4,7 @@ from models.cvae import CVAE
 from models.tcvae import TCVAE
 from models.factorvae import FactorVAE
 from models.rfvae import RFVAE
+from models.mlvae import MLVAE
 import warnings
 
 class VAE(object):
@@ -20,6 +21,8 @@ class VAE(object):
           return RFVAE(**kwargs)
       elif model in ['cvae', 'conditional-vae']:
           return CVAE(**kwargs)
+      elif model in ['mlvae', 'multi-level-vae']:
+          return MLVAE(**kwargs)
       else:
           warnings.warn(f'no matched model name can be found for {model}, use beta-vae instead')
           return BaseVAE(**kwargs)
