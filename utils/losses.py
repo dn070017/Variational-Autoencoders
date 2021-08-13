@@ -102,3 +102,51 @@ def rfvae_loss(model, batch, beta=1.0):
     total_loss = -tf.reduce_mean(logpx_z - (kl_divergence + (beta - 1) * tc_loss)) + model.eta_s * tf.reduce_sum(tf.abs(rc)) + model.eta_h * fractional_loss
 
     return total_loss, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)
+
+    
+def soft_introvae_encoder_loss(model, batch, alpha=2.0, beta=1.0):
+
+    s = tf.cast(tf.reduce_prod(batch['x'].shape), dtype=tf.float32)
+    mean_x, logvar_x, z_x, x_r = model.forward(batch) # line 4, 5, 8 in Algorithm 1
+
+    z_f = tf.random.normal(shape=z_x.shape) # line 6 in Algorithm 1
+    x_f = model.decode(z_f) # line 8 in Algorithm 1
+    mean_ff, logvar_ff, z_ff, x_ff = model.forward({'x': x_f}) # line 9, line 10 in Algorithm 1
+
+    cross_ent_x = compute_cross_entropy(batch['x'], x_r)
+    logpx_z = -1 * tf.reduce_sum(cross_ent_x, axis=[1, 2, 3])
+    cross_ent_f = compute_cross_entropy(batch['x'], x_ff)
+    logpf_z = -1 * tf.reduce_sum(cross_ent_f, axis=[1, 2, 3])
+
+    kl_divergence_x = tf.reduce_sum(compute_kl_divergence(mean_x, logvar_x), axis=1)
+    kl_divergence_f = tf.reduce_sum(compute_kl_divergence(mean_ff, logvar_ff), axis=1)
+
+    elbo_x = -s * tf.reduce_mean(logpx_z - beta * kl_divergence_x) # line 11 in Algorithm 1
+    elbo_f = -tf.reduce_mean(logpf_z - beta * kl_divergence_f) # line 12 in Algorithm 1
+
+    loss_encoder = elbo_x + 1 / alpha * tf.math.exp(alpha / s * elbo_f) # line 13, line 14 in Algorithm 1
+
+    return loss_encoder, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence_x)
+
+def soft_introvae_decoder_loss(model, batch, beta=1.0):
+
+    s = tf.cast(tf.reduce_prod(batch['x'].shape), dtype=tf.float32)
+    mean_x, logvar_x, z_x, x_r = model.forward(batch) # line 18 in Algotihm 1
+    z_f = tf.random.normal(shape=z_x.shape) 
+    x_f = model.decode(z_f) # line 19 in Algorithm 1
+    mean_ff, logvar_ff, z_ff, x_ff = model.forward({'x': x_f}) # line 20 in Algorithm 1
+    x_ff = tf.stop_gradient(x_ff)
+
+    cross_ent_x = compute_cross_entropy(batch['x'], x_r)
+    logpx_z = -1 * tf.reduce_sum(cross_ent_x, axis=[1, 2, 3]) 
+  
+    cross_ent_f = compute_cross_entropy(batch['x'], x_ff)
+    logpf_z = -1 * tf.reduce_sum(cross_ent_f, axis=[1, 2, 3])
+
+    kl_divergence_f = tf.reduce_sum(compute_kl_divergence(mean_ff, logvar_ff), axis=1)
+    elbo = -tf.reduce_mean(logpx_z) # line 21 in Algorithm 1
+    elbo_f = -tf.reduce_mean(logpf_z - beta * kl_divergence_f) # line 22 in Algorithm 1
+    
+    loss_encoder = s * (elbo + elbo_f)
+
+    return loss_encoder
