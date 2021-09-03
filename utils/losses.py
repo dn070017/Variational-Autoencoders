@@ -68,6 +68,27 @@ def cvae_loss(model, batch, beta=1.0):
     
     return total_loss, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)
 
+def mlvae_loss(model, batch, beta=1.0):
+    mean, logvar = model.encode(batch)
+    mean, logvar, unique_mean, unique_logvar = model.accumulate_group_evidence(mean, logvar, batch)
+
+    z = model.reparameterize(mean, logvar)
+    x_pred = model.decode(z, apply_sigmoid=False)
+
+    style_start_idx = model.latent_group_dim
+    style_mean = mean[:, style_start_idx:]
+    style_logvar = logvar[:, style_start_idx:]
+    style_kl_divergence = tf.reduce_sum(compute_kl_divergence(style_mean, style_logvar), axis=1)
+
+    logpx_z = -1 * tf.reduce_sum((batch['x'] - x_pred) ** 2, axis=1)
+
+    group_kl_divergence = tf.reduce_sum(compute_kl_divergence(unique_mean, unique_logvar), axis=1)
+    group_kl_divergence = tf.reduce_sum(group_kl_divergence)
+
+    total_loss = (-tf.reduce_sum(logpx_z - (style_kl_divergence)) + group_kl_divergence) / unique_mean.shape[0]
+
+    return total_loss, tf.reduce_mean(logpx_z), tf.reduce_mean(group_kl_divergence)
+
 def factorvae_loss(model, batch, beta=1.0):
     mean, logvar, z, x_pred = model.forward(batch)
 

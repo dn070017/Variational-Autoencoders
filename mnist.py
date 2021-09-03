@@ -127,16 +127,18 @@ if __name__ == "__main__":
         # from iPython (in VSCODE)
         warnings.warn('there is an error in the argument, use default parameters instead')
         model = main(
-            model_name='introvae',
+            model_name='vae',
             beta=2.0,
-            num_epochs=25,
-            train_size=6400,
+            num_epochs=50,
+            train_size=512,
             batch_size=32,
-            latent_dim=2,
+            latent_dim=16,
             test_size=25,
             outdir='tmp',
-            prefix='introvae',
+            prefix='mlvae',
             show_images=True
         )
 
- # %%
+#%%
+
+# %%
