@@ -19,7 +19,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Variational Autoencoders on MNIST Dataset.')
     parser.add_argument(
         '--model', type=str, default='vae',
-        help="one of the following: 'vae', 'beta-vae', 'tcvae', 'factorvae', 'rfvae'")
+        help="one of the following: 'vae', 'beta-vae', 'tcvae', 'factorvae', 'rfvae', 'mlvae', 'introvae'")
     parser.add_argument(
         '--beta', type=float, default=1.0,
         help='coefficient for KL divergence used in beta-VAE (Higgins et al., 2017) or coefficient used for total correlation in beta-TCVAE (Chen, et al., 2018) and in factor-vae (γ) (Kim and Mnih 2019), default: (1.0)')
@@ -127,16 +127,18 @@ if __name__ == "__main__":
         # from iPython (in VSCODE)
         warnings.warn('there is an error in the argument, use default parameters instead')
         model = main(
-            model_name='mlvae',
+            model_name='vae',
             beta=2.0,
-            num_epochs=25,
-            train_size=6400,
+            num_epochs=50,
+            train_size=512,
             batch_size=32,
-            latent_dim=2,
+            latent_dim=16,
             test_size=25,
             outdir='tmp',
             prefix='mlvae',
             show_images=True
         )
+
+#%%
 
 # %%

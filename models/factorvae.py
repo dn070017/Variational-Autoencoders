@@ -61,7 +61,7 @@ class FactorVAE(BaseVAE):
         # z_perm.append(tf.random.shuffle(z_dim)) # tf.random.shuffle not implemented for GPU
         z_perm.append(tf.gather(z_dim, tf.random.shuffle(tf.range(z_dim.shape[0])))) # hacky way to solve the issue
  
-    return tf.concat(z_perm, axis=1)
+    return tf.stop_gradient(tf.concat(z_perm, axis=1))
 
   @staticmethod
   def create_discriminator_label(z):

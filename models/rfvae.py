@@ -9,11 +9,13 @@ class RelevanceLayer(tf.keras.layers.Layer):
         self.lambda_min = lambda_min
         self.relevance = self.add_weight(
             'relevance', (1, latent_dim),
-            initializer=tf.keras.initializers.Constant(0.) # sigmoid(5.) = 0.9933 / sigmoid(0.) = 0.5
+            initializer=tf.keras.initializers.Constant(0.5) # sigmoid(5.) = 0.9933 / sigmoid(0.) = 0.5
         ) 
 
     def relevance_coefficient(self):
-        return tf.keras.activations.sigmoid(self.relevance)
+        rc = tf.keras.activations.relu(self.relevance)
+        rc = tf.where(rc > 1., 1., rc)
+        return rc
 
     def penalty_coefficient(self):
         rc = self.relevance_coefficient()

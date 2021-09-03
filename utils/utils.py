@@ -62,15 +62,19 @@ def plot_latent_images(model, batch, path, n, digit_size=28, show_images=False):
   relevance = model.relevance_score(batch=batch)
 
   order = tf.argsort(
-      relevance, axis=-1, direction='ASCENDING', stable=False, name=None
+    relevance, axis=-1, direction='DESCENDING', stable=False, name=None
   )
+
+  latent_dim = model.latent_dim
+  if type(model).__name__ == 'MLVAE':
+    latent_dim += model.latent_group_dim
 
   target = 0
   for i, yi in enumerate(grid_x):
     if target >= 10:
       target = 0
     for j, xi in enumerate(grid_y):
-      z = np.zeros((1, model.latent_dim))
+      z = np.zeros((1, latent_dim))
       # select the top 2 most relevant latent dimensions
       z[0, order[0]] = xi
       z[0, order[1]] = yi
