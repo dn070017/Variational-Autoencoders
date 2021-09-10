@@ -1,5 +1,5 @@
 #%%
-from models.vae import BaseVAE
+from models.betavae import BetaVAE
 from models.cvae import CVAE
 from models.tcvae import TCVAE
 from models.factorvae import FactorVAE
@@ -13,7 +13,7 @@ class VAE(object):
     def create_model(model='VAE', kwargs={}):
       model = model.lower()
       if model in ['vae', 'beta-vae', 'bvae', 'b-vae']:
-        return BaseVAE(**kwargs)
+        return BetaVAE(**kwargs)
       elif model in ['tcvae', 'beta-tcvae', 'btcvae', 'b-tcvae']:
         return TCVAE(**kwargs)
       elif model in ['factorvae']:
@@ -28,6 +28,6 @@ class VAE(object):
         return IntroVAE(**kwargs)
       else:
         warnings.warn(f'no matched model name can be found for {model}, use beta-vae instead')
-        return BaseVAE(**kwargs)
+        return BetaVAE(**kwargs)
 
 # %%

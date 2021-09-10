@@ -7,9 +7,15 @@ import warnings
 
 from models.creator import VAE
 from utils.utils import preprocess_images, generate_and_save_images, animated_image_generation, plot_latent_images
-from utils.losses import vae_loss
 from time import time
 from IPython import display
+
+try:
+    physical_devices = tf.config.list_physical_devices('GPU')
+    for i, d in enumerate(physical_devices):
+        tf.config.experimental.set_memory_growth(physical_devices[i], True)
+except:
+    print('No GPU detected. Use CPU instead')
 
 def data_generator(X, y):
     for image, label in zip(X, y):
@@ -20,6 +26,9 @@ def parse_arguments():
     parser.add_argument(
         '--model', type=str, default='vae',
         help="one of the following: 'vae', 'beta-vae', 'tcvae', 'factorvae', 'rfvae', 'mlvae', 'introvae'")
+    parser.add_argument(
+        '--task', type=str, default='mnist',
+        help="one of the following: 'mnist'")
     parser.add_argument(
         '--beta', type=float, default=1.0,
         help='coefficient for KL divergence used in beta-VAE (Higgins et al., 2017) or coefficient used for total correlation in beta-TCVAE (Chen, et al., 2018) and in factor-vae (γ) (Kim and Mnih 2019), default: (1.0)')
@@ -48,10 +57,14 @@ def parse_arguments():
     args = parser.parse_args()
     return args
 
-def main(model_name, beta, num_epochs, train_size, batch_size, latent_dim, test_size, outdir, prefix, show_images):
+def main(model_name, task, beta, num_epochs, train_size, batch_size, latent_dim, test_size, outdir, prefix, show_images):
     test_size = int(np.sqrt(test_size)) ** 2
 
-    (train_images, train_labels), (test_images, test_labels) = tf.keras.datasets.mnist.load_data()
+    if task.lower() == 'mnist':
+        (train_images, train_labels), (test_images, test_labels) = tf.keras.datasets.mnist.load_data()
+        input_dims = (28, 28, 1)
+        kernel_size = (3, 3)
+        strides = (2, 2)
 
     os.makedirs(outdir, exist_ok=True)
 
@@ -73,36 +86,45 @@ def main(model_name, beta, num_epochs, train_size, batch_size, latent_dim, test_
     ).shuffle(test_size).take(test_size).batch(test_size)
 
     optimizers = {
-        'vae': tf.keras.optimizers.Adam(1e-4),
-        'discriminator': tf.keras.optimizers.Adam(1e-4)
+        'primary': tf.keras.optimizers.Adam(1e-4),
+        'secondary': tf.keras.optimizers.Adam(1e-4)
     }
+
+    if model_name.lower() in ['mlvae', 'multi-level-vae']:
+        latent_dim = max(2, latent_dim - 2)
 
     model = VAE.create_model(
         model_name, 
-        {'latent_dim': latent_dim, 'prefix': prefix}
+        {
+            'latent_dim': latent_dim, 
+            'prefix': prefix,
+            'input_dims': input_dims,
+            'kernel_size': kernel_size,
+            'strides': strides
+        }
     )
 
     for epoch in range(1, num_epochs + 1):
         start_time = time()
         for train_x in train_dataset:
-            total_loss, reconstructed_loss, kl_divergence = model.train_step(
+            elbo, logpx_z, kl_divergence = model.train_step(
                 train_x, optimizers, beta=beta)
 
         end_time = time()
         display.clear_output(wait=False)
         for test_x in test_dataset:
-            total_loss, reconstructed_loss, kl_divergence = model.loss_fn(model, test_x)
+            elbo, logpx_z, kl_divergence = model.elbo(test_x, beta=beta)
 
         message = ''.join(
-            f'Epoch: {epoch:>5}\tTest ELBO: {-total_loss:>.2f}\t'
-            f'Test Reconstructed Loss: {-reconstructed_loss:>.5f}\tTest KL-Divergence: '
+            f'Epoch: {epoch:>5}\tTest ELBO: {elbo:>.2f}\t'
+            f'Test Reconstructed Loss: {logpx_z:>.5f}\tTest KL-Divergence: '
             f'{kl_divergence:>.2f}\tTime Elapse: {end_time - start_time:.3f}'
         )
         print(message)
         generate_and_save_images(model, outdir, epoch, test_x, show_images)
         
     animated_image_generation(model, outdir)
-    plot_latent_images(model, train_x, outdir, 15, show_images=show_images)
+    plot_latent_images(model, train_x, outdir, 10, show_images=show_images)
 
     return model
 
@@ -113,6 +135,7 @@ if __name__ == "__main__":
         # from command line/ debugger (in VSCODE)
         model = main(
             args.model,
+            args.task,
             args.beta,
             args.num_epochs,
             args.train_size,
@@ -127,18 +150,15 @@ if __name__ == "__main__":
         # from iPython (in VSCODE)
         warnings.warn('there is an error in the argument, use default parameters instead')
         model = main(
-            model_name='vae',
+            model_name='introvae',
+            task='mnist',
             beta=2.0,
-            num_epochs=50,
-            train_size=512,
-            batch_size=32,
-            latent_dim=16,
+            num_epochs=25,
+            train_size=12800,
+            batch_size=64,
+            latent_dim=2,
             test_size=25,
             outdir='tmp',
-            prefix='mlvae',
+            prefix='introvae',
             show_images=True
         )
-
-#%%
-
-# %%

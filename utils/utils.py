@@ -59,15 +59,19 @@ def plot_latent_images(model, batch, path, n, digit_size=28, show_images=False):
   image_height = image_width
   image = np.zeros((image_height, image_width))
 
-  relevance = model.relevance_score(batch=batch)
+  kl_divergence = model.average_kl_divergence(batch=batch)
 
-  order = tf.argsort(
-    relevance, axis=-1, direction='DESCENDING', stable=False, name=None
+  importance_order = tf.argsort(
+    kl_divergence, axis=-1, direction='DESCENDING', stable=False, name=None
   )
 
   latent_dim = model.latent_dim
   if type(model).__name__ == 'MLVAE':
-    latent_dim += model.latent_group_dim
+    latent_dim += model.latent_content_dim
+    importance_order = tf.argsort(
+      kl_divergence[model.latent_content_dim:], axis=-1, direction='DESCENDING', stable=False, name=None
+    )
+    importance_order += model.latent_content_dim
 
   target = 0
   for i, yi in enumerate(grid_x):
@@ -76,8 +80,8 @@ def plot_latent_images(model, batch, path, n, digit_size=28, show_images=False):
     for j, xi in enumerate(grid_y):
       z = np.zeros((1, latent_dim))
       # select the top 2 most relevant latent dimensions
-      z[0, order[0]] = xi
-      z[0, order[1]] = yi
+      z[0, importance_order[0]] = xi
+      z[0, importance_order[1]] = yi
       z = tf.convert_to_tensor(z, dtype=tf.float32)
       x_decoded = model.generate(z, target=target)
       digit = tf.reshape(x_decoded[0], (digit_size, digit_size))
