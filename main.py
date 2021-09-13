@@ -86,7 +86,7 @@ def main(model_name, task, beta, num_epochs, train_size, batch_size, latent_dim,
     ).shuffle(test_size).take(test_size).batch(test_size)
 
     optimizers = {
-        'primary': tf.keras.optimizers.Adam(1e-4),
+        'primary': tf.keras.optimizers.Adam(5e-4),
         'secondary': tf.keras.optimizers.Adam(1e-4)
     }
 
@@ -150,15 +150,16 @@ if __name__ == "__main__":
         # from iPython (in VSCODE)
         warnings.warn('there is an error in the argument, use default parameters instead')
         model = main(
-            model_name='introvae',
+            model_name='vade',
             task='mnist',
             beta=2.0,
-            num_epochs=25,
-            train_size=12800,
-            batch_size=64,
-            latent_dim=2,
+            num_epochs=50,
+            train_size=60000, # 12800
+            batch_size=128,  # 64
+            latent_dim=4,
             test_size=25,
             outdir='tmp',
-            prefix='introvae',
+            prefix='vade', 
             show_images=True
         )
+# %%
