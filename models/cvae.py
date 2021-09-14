@@ -4,9 +4,9 @@ import tensorflow as tf
 from models.betavae import BetaVAE
 
 class CVAE(BetaVAE):
-  def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), num_classes=10, prefix='tcvae'):
+  def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), num_components=10, prefix='tcvae'):
     super(CVAE, self).__init__(latent_dim, input_dims=input_dims, kernel_size=kernel_size, strides=strides, prefix=prefix)
-    self.num_classes = num_classes
+    self.num_classes = num_components
 
     self.cond_encoder = tf.keras.Sequential([
         tf.keras.layers.Dense(512),

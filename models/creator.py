@@ -6,6 +6,7 @@ from models.factorvae import FactorVAE
 from models.rfvae import RFVAE
 from models.mlvae import MLVAE
 from models.introvae import IntroVAE
+from models.vade import VaDE
 import warnings
 
 class VAE(object):
@@ -26,6 +27,8 @@ class VAE(object):
         return MLVAE(**kwargs)
       elif model in ['introvae', 'soft-introvae', 's-introvae']:
         return IntroVAE(**kwargs)
+      elif model in ['vade']:
+        return VaDE(**kwargs)
       else:
         warnings.warn(f'no matched model name can be found for {model}, use beta-vae instead')
         return BetaVAE(**kwargs)
