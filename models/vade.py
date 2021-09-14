@@ -12,9 +12,9 @@ class Parameters(tf.keras.layers.Layer):
     self.num_components = num_components
     self.pi_y = self.add_weight('pi_y', (1, num_components))
 
-    # shape: (event, batch)
-    self.mu_z_comp = self.add_weight('mu_z_comp', (latent_dim, num_components))
-    self.logvar_z_comp = self.add_weight('logvar_z_comp', (latent_dim, num_components))
+    # shape: (event, batch) 
+    self.mean_z_y = self.add_weight('mean_z_y', (latent_dim, num_components))
+    self.logvar_z_y = self.add_weight('logvar_z_y', (latent_dim, num_components))
 
 class VaDE(BetaVAE):
   def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), num_components=10, prefix='vade'):
@@ -33,22 +33,12 @@ class VaDE(BetaVAE):
     z_sample = self.reparameterize(mean_z_x, logvar_z_x)
     x_pred = self.decode(z_sample, apply_sigmoid=False)
 
-    #dist_z_y = tfp.distributions.Independent(
-    #  tfp.distributions.Normal(
-    #    tf.transpose(self.params.mu_z_comp, [1, 0]),
-    #    tf.exp(0.5 * tf.transpose(self.params.logvar_z_comp, [1, 0]))
-    #  ), reinterpreted_batch_ndims=1
-    #)
+    # transpose mean and logvar to (batch, event) and construct multivariate Gaussian
     dist_z_y = tfp.distributions.MultivariateNormalDiag(
-      tf.transpose(self.params.mu_z_comp, [1, 0]),
-      tf.exp(0.5 * tf.transpose(self.params.logvar_z_comp, [1, 0]))
+      tf.transpose(self.params.mean_z_y, [1, 0]),
+      tf.exp(0.5 * tf.transpose(self.params.logvar_z_y, [1, 0]))
     )
 
-    #print(tf.reduce_max(tf.abs(mean_z_x)).numpy())
-    #print(tf.reduce_max(tf.abs(logvar_z_x)).numpy())
-    #print(tf.reduce_max(tf.abs(mean_x_z)).numpy())
-    #print(tf.reduce_max(tf.abs(logvar_x_z)).numpy())
-    #print(self.params.pi_y)
     dist_y = tfp.distributions.Categorical(logits=tf.squeeze(self.params.pi_y))
     dist_z = tfp.distributions.MixtureSameFamily(dist_y, dist_z_y)
     
@@ -67,8 +57,8 @@ class VaDE(BetaVAE):
     mean_z_x, logvar_z_x = self.encode(batch)
     z_sample = self.reparameterize(mean_z_x, logvar_z_x)
     dist_z_y = tfp.distributions.MultivariateNormalDiag(
-        tf.transpose(self.params.mu_z_comp, [1, 0]),
-        tf.exp(0.5 * tf.transpose(self.params.logvar_z_comp, [1, 0]))
+        tf.transpose(self.params.mean_z_y, [1, 0]),
+        tf.exp(0.5 * tf.transpose(self.params.logvar_z_y, [1, 0]))
     )
 
     # reshape to be broadcastable (batch, batch, event)
@@ -77,3 +67,17 @@ class VaDE(BetaVAE):
     qy_x = tf.keras.activations.softmax(pz_y + py)
 
     return qy_x
+
+  def generate(self, z=None, num_generated_images=15, **kwargs):
+    if z is None:
+      z = tf.random.normal(shape=(num_generated_images, self.latent_dim), dtype=tf.float32)
+
+    if 'target' in kwargs:
+      target = kwargs['target']
+      z = tf.random.normal(
+        shape=(num_generated_images, self.latent_dim),
+        mean=self.params.mean_z_y[:, target],
+        stddev=tf.exp(0.5 * self.params.logvar_z_y[:, target]),
+        dtype=tf.float32)
+    
+    return self.decode(z, apply_sigmoid=True)
