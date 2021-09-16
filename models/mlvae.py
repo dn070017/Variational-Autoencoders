@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 
 from models.betavae import BetaVAE
-from utils.losses import compute_log_bernouli_pdf, compute_kl_divergence
+from utils.losses import compute_log_bernouli_pdf, compute_kl_divergence_standard_prior
 from utils.utils import compute_output_dims
 
 class MLVAE(BetaVAE):
@@ -53,12 +53,12 @@ class MLVAE(BetaVAE):
     sum_logpx_z = tf.reduce_sum(logpx_z, axis=0)
 
     # KL(qs_xi||ps)
-    kl_qs_xi_ps = tf.reduce_sum(compute_kl_divergence(style_mean, style_logvar), axis=-1)
+    kl_qs_xi_ps = tf.reduce_sum(compute_kl_divergence_standard_prior(style_mean, style_logvar), axis=-1)
     # 𝚺_i[KL(qsj_xj||ps)]
     sum_kl_qs_xi_ps = tf.reduce_sum(kl_qs_xi_ps, axis=0)
 
     # KL(qc_Xg||c)
-    kl_qc_xg_c = tf.reduce_sum(compute_kl_divergence(content_mean, content_logvar), axis=-1)
+    kl_qc_xg_c = tf.reduce_sum(compute_kl_divergence_standard_prior(content_mean, content_logvar), axis=-1)
     # 𝚺_G[KL(qc_Xg||c)]]
     sum_kl_qc_xg_c = tf.reduce_sum(kl_qc_xg_c, axis=0)
 
@@ -137,10 +137,10 @@ class MLVAE(BetaVAE):
     group_mean, group_logvar, style_mean, style_logvar = self.encode(batch)
     group_mean, group_logvar, unique_content_mean, unique_content_logvar = self.accumulate_group_evidence(group_mean, group_logvar, batch)
 
-    content_kl_divergence = compute_kl_divergence(unique_content_mean, unique_content_logvar)
+    content_kl_divergence = compute_kl_divergence_standard_prior(unique_content_mean, unique_content_logvar)
     content_kl_divergence = tf.reduce_mean(content_kl_divergence, axis=0)
 
-    style_kl_divergence = tf.reduce_mean(compute_kl_divergence(style_mean, style_logvar), axis=0)
+    style_kl_divergence = tf.reduce_mean(compute_kl_divergence_standard_prior(style_mean, style_logvar), axis=0)
 
     return tf.squeeze(tf.concat([content_kl_divergence, style_kl_divergence], axis=-1))
 

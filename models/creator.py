@@ -7,6 +7,7 @@ from models.rfvae import RFVAE
 from models.mlvae import MLVAE
 from models.introvae import IntroVAE
 from models.vade import VaDE
+from models.lvae import LVAE
 import warnings
 
 class VAE(object):
@@ -29,6 +30,8 @@ class VAE(object):
         return IntroVAE(**kwargs)
       elif model in ['vade']:
         return VaDE(**kwargs)
+      elif model in ['lvae', 'ladder-vae']:
+        return LVAE(**kwargs)
       else:
         warnings.warn(f'no matched model name can be found for {model}, use beta-vae instead')
         return BetaVAE(**kwargs)

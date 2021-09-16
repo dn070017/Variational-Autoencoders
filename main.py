@@ -108,7 +108,7 @@ def main(model_name, task, beta, num_epochs, train_size, batch_size, latent_dim,
         start_time = time()
         for train_x in train_dataset:
             elbo, logpx_z, kl_divergence = model.train_step(
-                train_x, optimizers, beta=beta)
+                train_x, optimizers, beta=beta, epoch=epoch)
 
         end_time = time()
         display.clear_output(wait=False)
@@ -150,16 +150,16 @@ if __name__ == "__main__":
         # from iPython (in VSCODE)
         warnings.warn('there is an error in the argument, use default parameters instead')
         model = main(
-            model_name='vade',
+            model_name='lvae',
             task='mnist',
             beta=2.0,
             num_epochs=50,
             train_size=60000, # 12800
-            batch_size=128,  # 64
+            batch_size=128, # 64
             latent_dim=4,
             test_size=25,
             outdir='tmp',
-            prefix='vade', 
+            prefix='lvae', 
             show_images=True
         )
 # %%

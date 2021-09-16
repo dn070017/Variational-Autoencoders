@@ -1,6 +1,6 @@
 import tensorflow as tf
 from models.betavae import BetaVAE
-from utils.losses import compute_log_bernouli_pdf, compute_kl_divergence
+from utils.losses import compute_log_bernouli_pdf, compute_kl_divergence_standard_prior
 
 class Discriminator(tf.keras.Model):
     def __init__(self):
@@ -65,7 +65,7 @@ class FactorVAE(BetaVAE):
     logpx_z = compute_log_bernouli_pdf(x_pred, batch['x'])
     logpx_z = tf.reduce_sum(logpx_z, axis=[1, 2, 3])
 
-    kl_divergence = tf.reduce_sum(compute_kl_divergence(mean_z, logvar_z), axis=1)
+    kl_divergence = tf.reduce_sum(compute_kl_divergence_standard_prior(mean_z, logvar_z), axis=1)
 
     density = self.discriminator(z_sample)
     tc_loss = tf.reduce_mean(density[:, 0] - density[:, 1])

@@ -1,5 +1,5 @@
 import tensorflow as tf
-from utils.losses import compute_log_bernouli_pdf, compute_kl_divergence
+from utils.losses import compute_log_bernouli_pdf, compute_kl_divergence_standard_prior
 from models.factorvae import FactorVAE
 
 class RelevanceLayer(tf.keras.layers.Layer):
@@ -58,7 +58,7 @@ class RFVAE(FactorVAE):
     logpx_z = compute_log_bernouli_pdf(x_pred, batch['x'])
     logpx_z = tf.reduce_sum(logpx_z, axis=[1, 2, 3])
 
-    kl_divergence_not_reduced = compute_kl_divergence(mean_z, logvar_z)
+    kl_divergence_not_reduced = compute_kl_divergence_standard_prior(mean_z, logvar_z)
     kl_divergence = tf.reduce_sum(kl_divergence_not_reduced, axis=-1)
     weighted_kl_divergence = tf.reduce_sum(rc_penalty * kl_divergence_not_reduced, axis=-1)
 
