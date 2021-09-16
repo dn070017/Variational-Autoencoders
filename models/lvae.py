@@ -230,14 +230,16 @@ class LVAE(tf.keras.Model):
     std = tf.math.sqrt(var)
     return eps * std + mean
 
-  def average_kl_divergence(self, batch):
+  def average_kl_divergence(self, batch, level=0):
     dn_list, mean_hat_list, var_hat_list = self.encode(batch)
     mean_p_list, var_p_list, mean_q_list, var_q_list, z_1 = self.decode_across_ladder(mean_hat_list, var_hat_list)
 
-    mean_p = mean_p_list[0]
-    mean_q = mean_q_list[0]
-    var_p = var_p_list[0]
-    var_q = var_q_list[0]
+    index = self.num_ladders - level - 1
+
+    mean_p = mean_p_list[index]
+    mean_q = mean_q_list[index]
+    var_p = var_p_list[index]
+    var_q = var_q_list[index]
 
     logvar_q = tf.math.log(var_q + 1e-7)
     logvar_p = tf.math.log(var_p + 1e-7)
