@@ -64,9 +64,9 @@ class BetaVAE(tf.keras.Model):
 
     return elbo, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)
 
-  def train_step(self, batch, optimizers, beta=1.0):
+  def train_step(self, batch, optimizers, **kwargs):
     with tf.GradientTape() as tape:
-      elbo, logpx_z, kl_divergence = self.elbo(batch, beta)
+      elbo, logpx_z, kl_divergence = self.elbo(batch, kwargs['beta'])
       gradients = tape.gradient(-1 * elbo, self.trainable_variables)
       optimizers['primary'].apply_gradients(zip(gradients, self.trainable_variables))
         

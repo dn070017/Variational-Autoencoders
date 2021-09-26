@@ -114,6 +114,9 @@ def main(model_name, task, beta, num_epochs, train_size, batch_size, latent_dim,
         display.clear_output(wait=False)
         for test_x in test_dataset:
             elbo, logpx_z, kl_divergence = model.elbo(test_x, beta=beta)
+        
+        if epoch % 5 == 1:
+            plot_latent_images(model, train_x, outdir, 10, show_images=show_images)
 
         message = ''.join(
             f'Epoch: {epoch:>5}\tTest ELBO: {elbo:>.2f}\t'
@@ -150,16 +153,39 @@ if __name__ == "__main__":
         # from iPython (in VSCODE)
         warnings.warn('there is an error in the argument, use default parameters instead')
         model = main(
-            model_name='lvae',
+            model_name='mfcvae',
             task='mnist',
-            beta=2.0,
+            beta=1.0,
             num_epochs=50,
             train_size=60000, # 12800
             batch_size=128, # 64
-            latent_dim=4,
+            latent_dim=2,
             test_size=25,
             outdir='tmp',
-            prefix='lvae', 
+            prefix='mfcvae', 
             show_images=True
         )
+
+
 # %%
+def generate(model, z=None, facet=0, num_generated_images=15, **kwargs):
+
+    if z is None:
+        z = tf.random.normal(shape=(num_generated_images, model.latent_dim), dtype=tf.float32)
+
+    if 'target' in kwargs:
+        target = kwargs['target']
+        z = tf.random.normal(
+            shape=(num_generated_images, model.latent_dim),
+            mean=model.params.mean_z_y[facet][:, target],
+            stddev=tf.sqrt(tf.exp(0.5 * model.params.logvar_z_y[facet][:, target])),
+            dtype=tf.float32
+        )
+
+    for _ in range(facet, -1, -1):
+        mean = model.mean_linear_layers[_](z)
+        var = model.var_softplus_layers[_](z)
+        z = model.reparameterize(mean, var)
+
+    return model.decode(z, apply_sigmoid=True)
+

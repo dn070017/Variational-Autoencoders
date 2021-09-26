@@ -4,7 +4,7 @@ from utils.utils import compute_output_dims
 from utils.losses import compute_log_bernouli_pdf, compute_kl_divergence_standard_prior, compute_kl_divergence
 
 class LVAE(tf.keras.Model):
-  def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), num_ladders=2, warnup_epochs=25, prefix='vae'):
+  def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), num_ladders=2, warmup_epochs=25, prefix='vae'):
     super().__init__()
     self.prefix = prefix
     #self.latent_dim = (latent_dim // num_ladders) * num_ladders
@@ -16,7 +16,7 @@ class LVAE(tf.keras.Model):
     self.strides = np.array(strides, dtype=np.int32)
     self.output_dims = None
     
-    self.warnup_epochs = warnup_epochs
+    self.warmup_epochs = warmup_epochs
 
     self.mlp_layers = []
     self.mean_linear_layers = []
@@ -36,7 +36,7 @@ class LVAE(tf.keras.Model):
         strides=self.strides, activation='relu'
       ),
       tf.keras.layers.Flatten(),
-      tf.keras.layers.Dense(self.latent_dim)
+      #tf.keras.layers.Dense(self.latent_dim)
     ])
 
     
@@ -45,9 +45,9 @@ class LVAE(tf.keras.Model):
       # p(z_l|x) is parameterized using fully connected neural network (l = 1...L)
       self.mlp_layers.append(
         tf.keras.Sequential([
-          tf.keras.layers.Dense(self.latent_dim * 4, activation='relu'),
+          tf.keras.layers.Dense(512, activation='relu'),
           tf.keras.layers.BatchNormalization(),
-          tf.keras.layers.Dense(self.latent_dim * 2, activation='relu'),
+          tf.keras.layers.Dense(256, activation='relu'),
           tf.keras.layers.BatchNormalization(),
           tf.keras.layers.Dense(self.latent_dim),
         ])
@@ -95,7 +95,7 @@ class LVAE(tf.keras.Model):
       max_beta = 1
       if 'beta' in kwargs:
         max_beta = kwargs['beta']
-      beta = max_beta * min(kwargs['epoch'] / self.warnup_epochs, 1)
+      beta = max_beta * min(kwargs['epoch'] / self.warmup_epochs, 1)
     else:
       if 'beta' in kwargs:
         beta = kwargs['beta']
@@ -103,8 +103,8 @@ class LVAE(tf.keras.Model):
         beta = 1
 
     dn_list, mean_hat_list, var_hat_list = self.encode(batch, training=training)
-    mean_p_list, var_p_list, mean_q_list, var_q_list, z_1 = self.decode_across_ladder(mean_hat_list, var_hat_list)
-    x_pred = self.decode(z_1, apply_sigmoid=False)
+    mean_p_list, var_p_list, mean_q_list, var_q_list, z_sample_list = self.encode_across_ladder(mean_hat_list, var_hat_list)
+    x_pred = self.decode(z_sample_list[0], apply_sigmoid=False)
     
     logpx_z = compute_log_bernouli_pdf(x_pred, batch['x'])
     logpx_z = tf.reduce_sum(logpx_z, axis=[1, 2, 3])
@@ -130,8 +130,8 @@ class LVAE(tf.keras.Model):
 
   def forward(self, batch, apply_sigmoid=False):
     dn_list, mean_hat_list, var_hat_list = self.encode(batch)
-    mean_p_list, var_p_list, mean_q_list, var_q_list, z_1 = self.decode_across_ladder(mean_hat_list, var_hat_list)
-    x_pred = self.decode(z_1, apply_sigmoid=apply_sigmoid)
+    mean_p_list, var_p_list, mean_q_list, var_q_list, z_sample_list = self.encode_across_ladder(mean_hat_list, var_hat_list)
+    x_pred = self.decode(z_sample_list[0], apply_sigmoid=apply_sigmoid)
   
     return tf.concat(mean_q_list, axis=1), tf.concat(var_q_list, axis=1), dn_list, x_pred
 
@@ -148,54 +148,54 @@ class LVAE(tf.keras.Model):
       mean_hat_list.append(self.mean_linear_layers[i-1](dn))
       # Eq (15) var_hat_qi = softplus(linear(di))
       var_hat_list.append(self.var_softplus_layers[i-1](dn))
+    
+    # If num_ladders = 2
+    # dn_list: [x0, d1, d2]
+    # mean_hat_list: [mu1, mu2]
+    # var_hat_list: [var1, var2]
 
     return dn_list, mean_hat_list, var_hat_list
 
-  def decode_across_ladder(self, mean_hat_list, var_hat_list):
-    z_reverse_input = []
-    mean_q_list = []
-    var_q_list = []
-    mean_p_list = []
-    var_p_list = []
+  def encode_across_ladder(self, mean_hat_list, var_hat_list):
+    z_sample_list = [None] * self.num_ladders
+    mean_q_list = [None] * self.num_ladders
+    var_q_list = [None] * self.num_ladders
+    mean_p_list = [None] * self.num_ladders
+    var_p_list = [None] * self.num_ladders
+    
+    # process the last layer
     index = self.num_ladders - 1
     z = self.reparameterize(mean_hat_list[index], var_hat_list[index])   
-    z_reverse_input.append(z)
-    for reverse_index in range(0, self.num_ladders):
-      index = self.num_ladders - reverse_index - 1
+    z_sample_list[index] = z
+    mean_p = tf.zeros_like(z)
+    var_p = tf.ones_like(z)
+    mean_q_list[index] = mean_hat_list[index]
+    var_q_list[index] = var_hat_list[index]
+    mean_p_list[index] = mean_p
+    var_p_list[index] = var_p
+
+    for index in reversed(range(0, self.num_ladders - 1)):
       # z_i (input for layer i) is sampled from the distribution define in layer i + 1.
-      # e.g. the generative distribution mean_p1, var_p1 for layer 1 takes the z sampled from layer 2 as the input.
-      z_input = z_reverse_input[reverse_index]
-      
-      if reverse_index == 0:
-        mean_p = tf.zeros_like(z_input)
-        var_p = tf.ones_like(z_input)
-      else:
-        mean_p = self.mean_linear_layers[index](z_input)
-        var_p = self.var_softplus_layers[index](z_input)
-      mean_p_list.append(mean_p)
-      var_p_list.append(var_p)
+      # e.g. the prior for the generative distribution mean_p1, var_p1 for layer 1 takes the z sampled from layer 2 as the input.
+      z_prior = z_sample_list[index + 1]
+      mean_p = self.mean_linear_layers[index](z_prior)
+      var_p = self.var_softplus_layers[index](z_prior)
+
+      mean_p_list[index] = mean_p
+      var_p_list[index] = var_p
 
       mean_hat = mean_hat_list[index]
       var_hat = var_hat_list[index]
 
-      if reverse_index == 0:
-        # mean_p and var_p is not used (in the original paper: where mu_q,L=mu_hat_q,L and var_q,L=var_hat_q,L.)
-        mean_q, var_q = mean_hat, var_hat
-      else:  
-        mean_q, var_q = self.precision_weighted_combination(mean_p, mean_hat, var_p, var_hat)
+      mean_q, var_q = self.precision_weighted_combination(mean_p, mean_hat, var_p, var_hat)
       
-      mean_q_list.append(mean_q)
-      var_q_list.append(var_q)
+      mean_q_list[index] = mean_q
+      var_q_list[index] = var_q
 
       z = self.reparameterize(mean_q, var_q)
-      z_reverse_input.append(z)
+      z_sample_list[index] = z
 
-    mean_p_list.reverse()
-    var_p_list.reverse()
-    mean_q_list.reverse()
-    var_q_list.reverse()
-
-    return mean_p_list, var_p_list, mean_q_list, var_q_list, z
+    return mean_p_list, var_p_list, mean_q_list, var_q_list, z_sample_list
 
   def decode(self, z, apply_sigmoid=False):
     logits = self.decoder(z)
@@ -209,16 +209,15 @@ class LVAE(tf.keras.Model):
     # eq (18) and eq (19)
     precision_zn = 1 / (var_zn + 1e-7)
     precision_dn = 1 / (var_dn + 1e-7)
-    var = 1 / (precision_zn + precision_dn)
+    var = tf.square(1 / (precision_zn + precision_dn))
     mean = (mean_zn * precision_zn + mean_dn * precision_dn) / (precision_zn + precision_dn)
     return mean, var
 
-  def generate(self, z=None, level=0, num_generated_images=15, **kwargs):
+  def generate(self, z=None, ladder=2, num_generated_images=15, **kwargs):
     if z is None:
       z = tf.random.normal(shape=(num_generated_images, self.latent_dim))
 
-    for reverse_index in range(level, self.num_ladders):
-      index = self.num_ladders - reverse_index - 1
+    for index in reversed(range(0, ladder)):
       mean = self.mean_linear_layers[index](z)
       var = self.var_softplus_layers[index](z)
       z = self.reparameterize(mean, var)
@@ -230,11 +229,11 @@ class LVAE(tf.keras.Model):
     std = tf.math.sqrt(var)
     return eps * std + mean
 
-  def average_kl_divergence(self, batch, level=0):
+  def average_kl_divergence(self, batch, ladder=2):
     dn_list, mean_hat_list, var_hat_list = self.encode(batch)
-    mean_p_list, var_p_list, mean_q_list, var_q_list, z_1 = self.decode_across_ladder(mean_hat_list, var_hat_list)
+    mean_p_list, var_p_list, mean_q_list, var_q_list, z_sample_list = self.encode_across_ladder(mean_hat_list, var_hat_list)
 
-    index = self.num_ladders - level - 1
+    index = ladder - 1
 
     mean_p = mean_p_list[index]
     mean_q = mean_q_list[index]

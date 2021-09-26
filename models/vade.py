@@ -36,7 +36,7 @@ class VaDE(BetaVAE):
     # transpose mean and logvar to (batch, event) and construct multivariate Gaussian
     dist_z_y = tfp.distributions.MultivariateNormalDiag(
       tf.transpose(self.params.mean_z_y, [1, 0]),
-      tf.exp(0.5 * tf.transpose(self.params.logvar_z_y, [1, 0]))
+      tf.sqrt(tf.exp(0.5 * tf.transpose(self.params.logvar_z_y, [1, 0]))) #sqrt
     )
 
     dist_y = tfp.distributions.Categorical(logits=tf.squeeze(self.params.pi_y))
@@ -58,7 +58,7 @@ class VaDE(BetaVAE):
     z_sample = self.reparameterize(mean_z_x, logvar_z_x)
     dist_z_y = tfp.distributions.MultivariateNormalDiag(
         tf.transpose(self.params.mean_z_y, [1, 0]),
-        tf.exp(0.5 * tf.transpose(self.params.logvar_z_y, [1, 0]))
+        tf.sqrt(tf.exp(0.5 * tf.transpose(self.params.logvar_z_y, [1, 0])))
     )
 
     # reshape to be broadcastable (batch, batch, event)
