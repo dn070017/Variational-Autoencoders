@@ -52,7 +52,8 @@ class BetaVAE(tf.keras.Model):
         padding='same')
     ])
 
-  def elbo(self, batch, beta=1.0):
+  def elbo(self, batch, **kwargs):
+    beta = kwargs['beta'] if 'beta' in kwargs else 1.0
     mean_z, logvar_z, z_sample, x_pred = self.forward(batch)
     
     logpx_z = compute_log_bernouli_pdf(x_pred, batch['x'])
@@ -66,7 +67,7 @@ class BetaVAE(tf.keras.Model):
 
   def train_step(self, batch, optimizers, **kwargs):
     with tf.GradientTape() as tape:
-      elbo, logpx_z, kl_divergence = self.elbo(batch, kwargs['beta'])
+      elbo, logpx_z, kl_divergence = self.elbo(batch, **kwargs)
       gradients = tape.gradient(-1 * elbo, self.trainable_variables)
       optimizers['primary'].apply_gradients(zip(gradients, self.trainable_variables))
         
