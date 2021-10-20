@@ -4,17 +4,16 @@ from utils.utils import compute_output_dims
 from utils.losses import compute_log_bernouli_pdf, compute_kl_divergence_standard_prior
 
 class VLAE(tf.keras.Model):
-  def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), num_layers=3, prefix='vae'):
+  def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), num_layers=3, warmup=10, prefix='vlae'):
     super().__init__()
     self.prefix = prefix
-    #self.latent_dim = (latent_dim // num_ladders) * num_ladders
-    #self.latent_dim = np.array(latent_dim // num_ladders, dtype=np.int32)
     self.latent_dim = latent_dim
     self.input_dims = np.array(input_dims, dtype=np.int32)
     self.kernel_size = np.array(kernel_size, dtype=np.int32)
     self.num_layers = num_layers
     self.strides = np.array(strides, dtype=np.int32)
     self.output_dims = None
+    self.warmup = warmup
 
     self.inference_layers = []
     self.inference_mean_linear_layers = []
@@ -35,7 +34,6 @@ class VLAE(tf.keras.Model):
         strides=self.strides, activation='relu'
       ),
       tf.keras.layers.Flatten(),
-      #tf.keras.layers.Dense(self.latent_dim)
     ])
 
     
@@ -43,7 +41,8 @@ class VLAE(tf.keras.Model):
       # eq (12) from Zhao et al., 2017
       self.inference_layers.append(
         tf.keras.Sequential([
-          tf.keras.layers.Dense(128, activation='relu'),
+          tf.keras.layers.Dense(128, activation='elu'),
+          tf.keras.layers.BatchNormalization()
         ])
       )
       # eq (13) from Zhao et al., 2017
@@ -59,12 +58,14 @@ class VLAE(tf.keras.Model):
 
       self.generative_layers_u.append(
         tf.keras.Sequential([
-          tf.keras.layers.Dense(128, activation='relu'),
+          tf.keras.layers.Dense(128, activation='elu'),
+          tf.keras.layers.BatchNormalization()
         ])
       )
       self.generative_layers_v.append(
         tf.keras.Sequential([
-          tf.keras.layers.Dense(64, activation='relu'),
+          tf.keras.layers.Dense(64, activation='elu'),
+          tf.keras.layers.BatchNormalization()
         ])
       )
 
@@ -94,25 +95,15 @@ class VLAE(tf.keras.Model):
         padding='same')
     ])
 
-  def elbo(self, batch, training=False, **kwargs):
-    """if 'epoch' in kwargs:
-      max_beta = 1
-      if 'beta' in kwargs:
-        max_beta = kwargs['beta']
-      beta = max_beta * min(kwargs['epoch'] / self.warmup_epochs, 1)
-    else:
-      if 'beta' in kwargs:
-        beta = kwargs['beta']
-      else:
-        beta = 1"""
-  
-    if 'beta' in kwargs:
-      beta = kwargs['beta']
-    else:
-      beta = 1
+  def elbo(self, batch, **kwargs):
+    training = kwargs['training'] if 'training' in kwargs else False
+    beta = kwargs['beta'] if 'beta' in kwargs else 1.0
 
-    hl_list, mean_list, var_list = self.encode(batch)
-    z_sample_list, z_hat_list = self.encode_across_layers(mean_list, var_list)
+    if 'epoch' in kwargs:
+      beta *= min(kwargs['epoch'] / self.warmup, 1.0)
+
+    hl_list, mean_list, var_list = self.encode(batch, training=training)
+    z_sample_list, z_hat_list = self.encode_across_layers(mean_list, var_list, training=training)
     x_pred = self.decode(z_hat_list[0], apply_sigmoid=False)
     
     logpx_z = compute_log_bernouli_pdf(x_pred, batch['x'])
@@ -125,24 +116,22 @@ class VLAE(tf.keras.Model):
       else:
         kl_divergence += tf.reduce_sum(compute_kl_divergence_standard_prior(mean_list[i], tf.math.log(var_list[i] + 1e-7)), axis=1)
 
-
-    print(tf.reduce_mean(logpx_z).numpy(), tf.reduce_mean(kl_divergence).numpy())
     elbo = tf.reduce_mean(logpx_z - beta * kl_divergence)
-    #elbo = tf.reduce_mean(logpx_z - 0 * kl_divergence)
 
     return elbo, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)
 
   def train_step(self, batch, optimizers, **kwargs):
     with tf.GradientTape() as tape:
-      elbo, logpx_z, kl_divergence = self.elbo(batch, training=True, **kwargs)
+      kwargs['training'] = True
+      elbo, logpx_z, kl_divergence = self.elbo(batch, **kwargs)
       gradients = tape.gradient(-1 * elbo, self.trainable_variables)
       optimizers['primary'].apply_gradients(zip(gradients, self.trainable_variables))
         
       return elbo, logpx_z, kl_divergence
 
-  def forward(self, batch, apply_sigmoid=False):
-    hl_list, mean_list, var_list = self.encode(batch)
-    z_sample_list, z_hat_list = self.encode_across_layers(mean_list, var_list)
+  def forward(self, batch, apply_sigmoid=False, training=False):
+    hl_list, mean_list, var_list = self.encode(batch, training=training)
+    z_sample_list, z_hat_list = self.encode_across_layers(mean_list, var_list, training=training)
     x_pred = self.decode(z_hat_list[0], apply_sigmoid=apply_sigmoid)
   
     return tf.concat(mean_list, axis=1), tf.concat(var_list, axis=1), hl_list, x_pred
@@ -167,25 +156,25 @@ class VLAE(tf.keras.Model):
 
     return hl_list, mean_list, var_list
 
-  def encode_across_layers(self, mean_list, var_list):
+  def encode_across_layers(self, mean_list, var_list, training=False):
     z_sample_list = [None] * self.num_layers
     z_hat_list = [None] * self.num_layers
     
     # process the last layer
     index = self.num_layers - 1
-    z = self.reparameterize(mean_list[index], var_list[index])
+    z = self.reparameterize(mean_list[index], var_list[index], training=training)
     z_sample_list[index] = z
     # eq (8)
-    z_hat_list[index] = self.generative_layers_u[index](tf.concat([z, self.generative_layers_v[index](z)], axis=1))
+    z_hat_list[index] = self.generative_layers_u[index](tf.concat([z, self.generative_layers_v[index](z, training=training)], axis=1), training=training)
     
     for index in reversed(range(0, self.num_layers - 1)):
       # z_i (input for layer i) is sampled from the distribution define in layer i + 1.
       # e.g. the prior for the generative distribution mean_p1, var_p1 for layer 1 takes the z sampled from layer 2 as the input.
       z_hat_prior = z_hat_list[index + 1]
-      z = self.reparameterize(mean_list[index], var_list[index])
+      z = self.reparameterize(mean_list[index], var_list[index], training=training)
       z_sample_list[index] = z
       # eq (9)
-      z_hat_list[index] = self.generative_layers_u[index](tf.concat([z_hat_prior, self.generative_layers_v[index](z)], axis=1))
+      z_hat_list[index] = self.generative_layers_u[index](tf.concat([z_hat_prior, self.generative_layers_v[index](z, training=training)], axis=1), training=training)
 
     return z_sample_list, z_hat_list
 
@@ -209,22 +198,23 @@ class VLAE(tf.keras.Model):
 
     index = self.num_layers - 1
     z = z_sample_list[index]
-    z_hat_list[index] = self.generative_layers_u[index](tf.concat([z, self.generative_layers_v[index](z)], axis=1))
+    z_hat_list[index] = self.generative_layers_u[index](tf.concat([z, self.generative_layers_v[index](z, training=False)], axis=1), training=False)
     
     for index in reversed(range(0, self.num_layers - 1)):
       z_hat_prior = z_hat_list[index + 1]
       z = z_sample_list[index]
-      z_hat_list[index] = self.generative_layers_u[index](tf.concat([z_hat_prior, self.generative_layers_v[index](z)], axis=1))
+      z_hat_list[index] = self.generative_layers_u[index](tf.concat([z_hat_prior, self.generative_layers_v[index](z, training=False)], axis=1), training=False)
 
     return self.decode(z_hat_list[0], apply_sigmoid=True)
 
-  def reparameterize(self, mean, var):
+  def reparameterize(self, mean, var, training=True):
+    if not training:
+      return mean
     eps = tf.random.normal(shape=mean.shape) # each distribution has its own epsilon
     std = tf.math.sqrt(var)
     return eps * std + mean
 
   def average_kl_divergence(self, batch, layer=3):
-    hl_list, mean_list, var_list = self.encode(batch)
-    #z_sample_list, z_hat_list = self.encode_across_layers(mean_list, var_list)
+    hl_list, mean_list, var_list = self.encode(batch, training=False)
 
     return tf.reduce_mean(compute_kl_divergence_standard_prior(mean_list[layer-1], tf.math.log(var_list[layer-1] + 1e-7)), axis=0)
