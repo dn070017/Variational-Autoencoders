@@ -25,7 +25,8 @@ class MLVAE(BetaVAE):
     self.unique_content_mean = None
     self.unique_content_logvar = None
 
-  def elbo(self, batch, beta=1.0):
+  def elbo(self, batch, **kwargs):
+    beta = kwargs['beta'] if 'beta' in kwargs else 1.0
     content_mean, content_logvar, style_mean, style_logvar = self.encode(batch)
     content_mean, content_logvar, unique_content_mean, unique_content_logvar = self.accumulate_group_evidence(content_mean, content_logvar, batch)
     

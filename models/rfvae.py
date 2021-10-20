@@ -47,7 +47,11 @@ class RFVAE(FactorVAE):
     
     return discriminator_loss
 
-  def elbo(self, batch, beta=1.0, eta_s=6.4, eta_h=6.4):
+  def elbo(self, batch, **kwargs):
+    beta = kwargs['beta'] if 'beta' in kwargs else 1.0
+    eta_s = kwargs['eta_s'] if 'beta' in kwargs else 6.4
+    eta_h = kwargs['eta_h'] if 'beta' in kwargs else 6.4
+
     rc = self.relevance.relevance_coefficient()       # R
     rc_penalty = self.relevance.penalty_coefficient() # lambda
 

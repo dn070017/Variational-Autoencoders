@@ -21,13 +21,13 @@ class FactorVAE(BetaVAE):
     super(FactorVAE, self).__init__(latent_dim, input_dims=input_dims, kernel_size=kernel_size, strides=strides, prefix=prefix)
     self.discriminator = Discriminator()
   
-  def train_step(self, batch, optimizers, beta=1.0):
+  def train_step(self, batch, optimizers, **kwargs):
     self.set_discriminator_trainable(False)
     batch_0, batch_1 = tf.split(batch['x'], 2, axis=0) 
     split_batch = [{'x': batch_0}, {'x': batch_1}]
 
     with tf.GradientTape() as tape:
-      elbo, logpx_z, kl_divergence = self.elbo(split_batch[0], beta)
+      elbo, logpx_z, kl_divergence = self.elbo(split_batch[0], **kwargs)
       gradients = tape.gradient(-1 * elbo, self.trainable_variables)
       optimizers['primary'].apply_gradients(zip(gradients, self.trainable_variables))
 
@@ -59,7 +59,8 @@ class FactorVAE(BetaVAE):
     self.encoder.trainable = not trainable
     self.decoder.trainable = not trainable
 
-  def elbo(self, batch, beta=1.0):
+  def elbo(self, batch, **kwargs):
+    beta = kwargs['beta'] if 'beta' in kwargs else 1.0
     mean_z, logvar_z, z_sample, x_pred = self.forward(batch)
     
     logpx_z = compute_log_bernouli_pdf(x_pred, batch['x'])

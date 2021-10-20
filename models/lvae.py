@@ -90,17 +90,15 @@ class LVAE(tf.keras.Model):
         padding='same')
     ])
 
-  def elbo(self, batch, training=False, **kwargs):
+  def elbo(self, batch, **kwargs):
+    training = kwargs['training'] if 'training' in kwargs else False
+    beta = kwargs['beta'] if 'beta' in kwargs else 1.0
+
     if 'epoch' in kwargs:
       max_beta = 1
       if 'beta' in kwargs:
         max_beta = kwargs['beta']
       beta = max_beta * min(kwargs['epoch'] / self.warmup_epochs, 1)
-    else:
-      if 'beta' in kwargs:
-        beta = kwargs['beta']
-      else:
-        beta = 1
 
     dn_list, mean_hat_list, var_hat_list = self.encode(batch, training=training)
     mean_p_list, var_p_list, mean_q_list, var_q_list, z_sample_list = self.encode_across_ladder(mean_hat_list, var_hat_list)
@@ -122,7 +120,8 @@ class LVAE(tf.keras.Model):
 
   def train_step(self, batch, optimizers, **kwargs):
     with tf.GradientTape() as tape:
-      elbo, logpx_z, kl_divergence = self.elbo(batch, training=True, **kwargs)
+      kwargs['training'] = True
+      elbo, logpx_z, kl_divergence = self.elbo(batch, **kwargs)
       gradients = tape.gradient(-1 * elbo, self.trainable_variables)
       optimizers['primary'].apply_gradients(zip(gradients, self.trainable_variables))
         

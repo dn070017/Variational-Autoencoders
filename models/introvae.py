@@ -8,17 +8,17 @@ class IntroVAE(BetaVAE):
   def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), prefix='tcvae'):
     super(IntroVAE, self).__init__(latent_dim, input_dims=input_dims, kernel_size=kernel_size, strides=strides, prefix=prefix)
 
-  def train_step(self, batch, optimizers, beta=1.0):
+  def train_step(self, batch, optimizers, **kwargs):
     self.set_generator_trainable(False)
     with tf.GradientTape() as tape:
-      encoder_loss, reconstructed_loss, kl_divergence, z, z_f = self.encoder_loss_fn(batch, beta=beta)
+      encoder_loss, reconstructed_loss, kl_divergence, z, z_f = self.encoder_loss_fn(batch, **kwargs)
       
       gradients = tape.gradient(encoder_loss, self.trainable_variables)
       optimizers['primary'].apply_gradients(zip(gradients, self.trainable_variables))
 
     self.set_generator_trainable(True)
     with tf.GradientTape() as tape:
-      decoder_loss = self.decoder_loss_fn(batch, z, z_f, beta=beta)
+      decoder_loss = self.decoder_loss_fn(batch, z, z_f, **kwargs)
       gradients = tape.gradient(decoder_loss, self.trainable_variables)
       optimizers['secondary'].apply_gradients(zip(gradients, self.trainable_variables))
         
@@ -28,7 +28,8 @@ class IntroVAE(BetaVAE):
     self.encoder.trainable = not trainable
     self.decoder.trainable = trainable
 
-  def encoder_loss_fn(self, batch, beta=1.0):
+  def encoder_loss_fn(self, batch, **kwargs):
+    beta = kwargs['beta'] if 'beta' in kwargs else 1.0
     # implementation of Algorithm 1 from Daniel and Tamar 2021 (not specified additionally)
     # some part is from Algorithm 1 from Huang et al 2018 (specified as IntroVAE)
     # line 2
@@ -77,7 +78,8 @@ class IntroVAE(BetaVAE):
     #print('ENC', loss_encoder.numpy())
     return loss_encoder, tf.reduce_mean(logpx), tf.reduce_mean(kl_divergence_x), z, z_f
 
-  def decoder_loss_fn(self, batch, z, z_f, beta=1.0):
+  def decoder_loss_fn(self, batch, z, z_f, **kwargs):
+    beta = kwargs['beta'] if 'beta' in kwargs else 1.0
     # implementation from Daniel and Tamar 2021
     # line 2
     s = tf.cast(1 / tf.reduce_prod(batch['x'].shape[1:]), dtype=tf.float32)
