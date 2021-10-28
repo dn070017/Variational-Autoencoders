@@ -70,8 +70,8 @@ def main(model_name, task, beta, num_epochs, train_size, batch_size, latent_dim,
   os.makedirs(os.path.join(outdir, 'logging'), exist_ok=True)
 
   optimizers = {
-    'primary': tf.keras.optimizers.Adam(5e-3),
-    'secondary': tf.keras.optimizers.Adam(5e-3)
+    'primary': tf.keras.optimizers.Adam(1e-3),
+    'secondary': tf.keras.optimizers.Adam(1e-3)
   }
 
   train_dataset, test_dataset = get_dataset(task, train_size, test_size, batch_size)
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     # from iPython (in VSCODE)
     warnings.warn('there is an error in the argument, use default parameters instead')
     model = main(
-      model_name='mfcvae',
+      model_name='promfcvae',
       task='mnist',
       beta=1.0,
       num_epochs=50,
@@ -170,6 +170,6 @@ if __name__ == "__main__":
       latent_dim=2,
       test_size=25,
       outdir='tmp',
-      prefix='mfcvae', 
+      prefix='promfcvae', 
       show_images=True
     )
