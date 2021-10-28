@@ -109,6 +109,9 @@ class MFCVAE(VLAE):
     return qy_x
 
   def generate(self, z=None, facet=3, num_generated_images=15, **kwargs):
+    if facet > self.num_facets:
+      facet = self.num_facets
+
     training = False
 
     if z is None:

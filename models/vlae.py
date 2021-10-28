@@ -64,8 +64,10 @@ class VLAE(tf.keras.Model):
       )
       self.generative_layers_v.append(
         tf.keras.Sequential([
-          tf.keras.layers.Dense(64, activation='elu'),
-          tf.keras.layers.BatchNormalization()
+          tf.keras.layers.Dense(128, activation='elu'),
+          tf.keras.layers.BatchNormalization(),
+          tf.keras.layers.Dense(256, activation='elu'),
+          tf.keras.layers.BatchNormalization(), 
         ])
       )
 
@@ -187,6 +189,8 @@ class VLAE(tf.keras.Model):
     return logits
 
   def generate(self, z=None, layer=3, num_generated_images=15, **kwargs):
+    if layer > self.num_layers:
+      layer = self.num_layers
     if z is None:
       z = tf.zeros(shape=(num_generated_images, self.latent_dim))
     
@@ -215,6 +219,8 @@ class VLAE(tf.keras.Model):
     return eps * std + mean
 
   def average_kl_divergence(self, batch, layer=3):
+    if layer > self.num_layers:
+      layer = self.num_layers
     hl_list, mean_list, var_list = self.encode(batch, training=False)
 
     return tf.reduce_mean(compute_kl_divergence_standard_prior(mean_list[layer-1], tf.math.log(var_list[layer-1] + 1e-7)), axis=0)
