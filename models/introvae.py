@@ -1,24 +1,24 @@
 import numpy as np
 import tensorflow as tf
 
-from utils.losses import compute_kl_divergence, compute_log_bernouli_pdf
+from utils.losses import compute_kl_divergence_standard_prior, compute_log_bernouli_pdf
 from models.betavae import BetaVAE
 
 class IntroVAE(BetaVAE):
   def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), prefix='tcvae'):
     super(IntroVAE, self).__init__(latent_dim, input_dims=input_dims, kernel_size=kernel_size, strides=strides, prefix=prefix)
 
-  def train_step(self, batch, optimizers, beta=1.0):
+  def train_step(self, batch, optimizers, **kwargs):
     self.set_generator_trainable(False)
     with tf.GradientTape() as tape:
-      encoder_loss, reconstructed_loss, kl_divergence, z, z_f = self.encoder_loss_fn(batch, beta=beta)
+      encoder_loss, reconstructed_loss, kl_divergence, z, z_f = self.encoder_loss_fn(batch, **kwargs)
       
       gradients = tape.gradient(encoder_loss, self.trainable_variables)
       optimizers['primary'].apply_gradients(zip(gradients, self.trainable_variables))
 
     self.set_generator_trainable(True)
     with tf.GradientTape() as tape:
-      decoder_loss = self.decoder_loss_fn(batch, z, z_f, beta=beta)
+      decoder_loss = self.decoder_loss_fn(batch, z, z_f, **kwargs)
       gradients = tape.gradient(decoder_loss, self.trainable_variables)
       optimizers['secondary'].apply_gradients(zip(gradients, self.trainable_variables))
         
@@ -28,7 +28,8 @@ class IntroVAE(BetaVAE):
     self.encoder.trainable = not trainable
     self.decoder.trainable = trainable
 
-  def encoder_loss_fn(self, batch, beta=1.0):
+  def encoder_loss_fn(self, batch, **kwargs):
+    beta = kwargs['beta'] if 'beta' in kwargs else 1.0
     # implementation of Algorithm 1 from Daniel and Tamar 2021 (not specified additionally)
     # some part is from Algorithm 1 from Huang et al 2018 (specified as IntroVAE)
     # line 2
@@ -47,7 +48,7 @@ class IntroVAE(BetaVAE):
     # line 11
     logpx = compute_log_bernouli_pdf(x_r, batch['x'])
     logpx = tf.reduce_sum(logpx, axis=[1, 2, 3])
-    kl_divergence_x = tf.reduce_sum(compute_kl_divergence(mean_z, logvar_z), axis=1)
+    kl_divergence_x = tf.reduce_sum(compute_kl_divergence_standard_prior(mean_z, logvar_z), axis=1)
     elbo_x = s * tf.reduce_mean(logpx - beta * kl_divergence_x)
 
     # line 9, line 10
@@ -58,7 +59,7 @@ class IntroVAE(BetaVAE):
     # line 8, 9 from IntroVAE
     logpx_rr = compute_log_bernouli_pdf(x_rr, x_r_norm)
     logpx_rr = tf.reduce_sum(logpx_rr, axis=[1, 2, 3])
-    kl_divergence_r = tf.reduce_sum(compute_kl_divergence(mean_z_rr, logvar_z_rr), axis=1)
+    kl_divergence_r = tf.reduce_sum(compute_kl_divergence_standard_prior(mean_z_rr, logvar_z_rr), axis=1)
     elbo_r = logpx_rr - beta * kl_divergence_r
 
     #print(tf.reduce_mean(tf.math.exp(2 * s * logpx_rr)).numpy(), tf.reduce_mean(2 * s * logpx_rr).numpy())
@@ -66,7 +67,7 @@ class IntroVAE(BetaVAE):
     # line 12, 13
     logpx_ff = compute_log_bernouli_pdf(x_ff, x_f_norm)
     logpx_ff = tf.reduce_sum(logpx_ff, axis=[1, 2, 3])
-    kl_divergence_f = tf.reduce_sum(compute_kl_divergence(mean_z_ff, logvar_z_ff), axis=1)
+    kl_divergence_f = tf.reduce_sum(compute_kl_divergence_standard_prior(mean_z_ff, logvar_z_ff), axis=1)
     elbo_f = logpx_ff - beta * kl_divergence_f
     exp_elbo_f = 1 / 2 * (tf.reduce_mean(tf.math.exp(2 * s * elbo_r)) + tf.reduce_mean(tf.math.exp(2 * s * elbo_f)))
 
@@ -77,7 +78,8 @@ class IntroVAE(BetaVAE):
     #print('ENC', loss_encoder.numpy())
     return loss_encoder, tf.reduce_mean(logpx), tf.reduce_mean(kl_divergence_x), z, z_f
 
-  def decoder_loss_fn(self, batch, z, z_f, beta=1.0):
+  def decoder_loss_fn(self, batch, z, z_f, **kwargs):
+    beta = kwargs['beta'] if 'beta' in kwargs else 1.0
     # implementation from Daniel and Tamar 2021
     # line 2
     s = tf.cast(1 / tf.reduce_prod(batch['x'].shape[1:]), dtype=tf.float32)
@@ -103,13 +105,13 @@ class IntroVAE(BetaVAE):
     # line 12 from IntroVAE
     logpx_rr = compute_log_bernouli_pdf(x_rr, x_r_norm)
     logpx_rr = tf.reduce_sum(logpx_rr, axis=[1, 2, 3])
-    kl_divergence_r = tf.reduce_sum(compute_kl_divergence(mean_z_rr, logvar_z_rr), axis=1)
+    kl_divergence_r = tf.reduce_sum(compute_kl_divergence_standard_prior(mean_z_rr, logvar_z_rr), axis=1)
     elbo_r = tf.reduce_mean(1e-8 * logpx_rr - beta * kl_divergence_r)
 
     # line 22
     logpx_ff = compute_log_bernouli_pdf(x_ff, x_f_norm)
     logpx_ff = tf.reduce_sum(logpx_ff, axis=[1, 2, 3])
-    kl_divergence_f = tf.reduce_sum(compute_kl_divergence(mean_z_ff, logvar_z_ff), axis=1)
+    kl_divergence_f = tf.reduce_sum(compute_kl_divergence_standard_prior(mean_z_ff, logvar_z_ff), axis=1)
     elbo_f = tf.reduce_mean(1e-8 * logpx_ff - beta * kl_divergence_f)
     
     # line 23

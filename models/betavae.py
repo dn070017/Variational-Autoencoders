@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from utils.utils import compute_output_dims
-from utils.losses import compute_log_bernouli_pdf, compute_kl_divergence
+from utils.losses import compute_log_bernouli_pdf, compute_kl_divergence_standard_prior
 
 class BetaVAE(tf.keras.Model):
   def __init__(self, latent_dim, input_dims=(28, 28, 1), kernel_size=(3, 3), strides=(2, 2), prefix='vae'):
@@ -52,21 +52,22 @@ class BetaVAE(tf.keras.Model):
         padding='same')
     ])
 
-  def elbo(self, batch, beta=1.0):
+  def elbo(self, batch, **kwargs):
+    beta = kwargs['beta'] if 'beta' in kwargs else 1.0
     mean_z, logvar_z, z_sample, x_pred = self.forward(batch)
     
     logpx_z = compute_log_bernouli_pdf(x_pred, batch['x'])
     logpx_z = tf.reduce_sum(logpx_z, axis=[1, 2, 3])
     
-    kl_divergence = tf.reduce_sum(compute_kl_divergence(mean_z, logvar_z), axis=1)
+    kl_divergence = tf.reduce_sum(compute_kl_divergence_standard_prior(mean_z, logvar_z), axis=1)
     
     elbo = tf.reduce_mean(logpx_z - beta * kl_divergence)
 
     return elbo, tf.reduce_mean(logpx_z), tf.reduce_mean(kl_divergence)
 
-  def train_step(self, batch, optimizers, beta=1.0):
+  def train_step(self, batch, optimizers, **kwargs):
     with tf.GradientTape() as tape:
-      elbo, logpx_z, kl_divergence = self.elbo(batch, beta)
+      elbo, logpx_z, kl_divergence = self.elbo(batch, **kwargs)
       gradients = tape.gradient(-1 * elbo, self.trainable_variables)
       optimizers['primary'].apply_gradients(zip(gradients, self.trainable_variables))
         
@@ -101,4 +102,4 @@ class BetaVAE(tf.keras.Model):
 
   def average_kl_divergence(self, batch):
     mean_z, logvar_z = self.encode(batch)
-    return tf.reduce_mean(compute_kl_divergence(mean_z, logvar_z), axis=0)
+    return tf.reduce_mean(compute_kl_divergence_standard_prior(mean_z, logvar_z), axis=0)

@@ -7,9 +7,15 @@ def compute_cross_entropy(p_dist, sample):
     # -1[xlog(p) + (1 - x)log(1 - p)]
     return tf.nn.sigmoid_cross_entropy_with_logits(logits=p_dist, labels=sample)
 
-def compute_kl_divergence(mean, logvar):
+def compute_kl_divergence_standard_prior(mean, logvar):
     # Supplmentary B from Kingma et al., 2014 (before applying summation 𝚺_j )
     return -.5 * ((1 + logvar) - tf.exp(logvar) - tf.pow(mean, 2))
+
+def compute_kl_divergence(mean_p, mean_q, logvar_p, logvar_q):
+    # 𝚺_jp(x)log[p(x)/q(x)] (before applying summation 𝚺_j )
+    var_p = tf.exp(logvar_p)
+    var_q = tf.exp(logvar_q)
+    return .5 * (-1 + (logvar_q - logvar_p) + (tf.pow(mean_p - mean_q, 2) / var_q) + var_p / var_q)
 
 def compute_log_normal_pdf(mu, logvar, sample):
     log2pi = tf.math.log(2. * np.pi)

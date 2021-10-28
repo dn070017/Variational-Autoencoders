@@ -7,6 +7,11 @@ from models.rfvae import RFVAE
 from models.mlvae import MLVAE
 from models.introvae import IntroVAE
 from models.vade import VaDE
+from models.lvae import LVAE
+from models.vlae import VLAE
+from models.provlae import ProVLAE
+from models.mfcvae import MFCVAE
+from models.promfcvae import ProMFCVAE
 import warnings
 
 class VAE(object):
@@ -29,6 +34,16 @@ class VAE(object):
         return IntroVAE(**kwargs)
       elif model in ['vade']:
         return VaDE(**kwargs)
+      elif model in ['lvae', 'ladder-vae']:
+        return LVAE(**kwargs)
+      elif model in ['vlae']:
+        return VLAE(**kwargs)
+      elif model in ['provlae']:
+        return ProVLAE(**kwargs)
+      elif model in ['mfcvae']:
+        return MFCVAE(**kwargs)
+      elif model in ['promfcvae']:
+        return ProMFCVAE(**kwargs)
       else:
         warnings.warn(f'no matched model name can be found for {model}, use beta-vae instead')
         return BetaVAE(**kwargs)
