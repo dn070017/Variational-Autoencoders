@@ -1,0 +1,17 @@
+imageio
+tensorflow==2.8.0
+tensorflow-addons==0.14.0
+tensorflow-datasets
+tensorflow-probability==0.16.0
+tensorflow-hub
+bokeh
+colorcet
+imageio
+ipykernel
+jupyterlab
+mlflow
+pandas
+plotly
+pylint
+scikit-learn
+seaborn
